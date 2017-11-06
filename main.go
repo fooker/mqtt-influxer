@@ -10,6 +10,7 @@ import (
 )
 
 var config_flag = flag.String("config", "config.yaml", "Path to the config file")
+var http_flag = flag.String("http-port", "", "Port for http status export (leave empty to disable)")
 
 func main() {
 	flag.Parse()
@@ -94,5 +95,10 @@ func main() {
 		exports = append(exports, export)
 	}
 
-	Publish("localhost:8080", exports)
+	if *http_flag != "" {
+		Publish(*http_flag, exports)
+		
+	} else {
+		select {}
+	}
 }
