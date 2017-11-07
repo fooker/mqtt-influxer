@@ -10,7 +10,7 @@ import (
 )
 
 var config_flag = flag.String("config", "config.yaml", "Path to the config file")
-var http_flag = flag.String("http-port", "", "Port for http status export (leave empty to disable)")
+var http_flag = flag.String("http", "", "Listening address for http status export (leave empty to disable)")
 
 func main() {
 	flag.Parse()
