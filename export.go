@@ -18,6 +18,7 @@ type Point struct {
 	Tags   map[string]string
 	Field  string
 	Value  interface{}
+	Time   time.Time
 }
 
 type Export struct {
@@ -39,8 +40,7 @@ type Export struct {
 	interval time.Duration
 	ticker   *time.Ticker
 
-	I chan<- mqtt.Message
-	O <-chan Point
+	o chan<- Point
 }
 
 func findParser(p string) (Parser, error) {
@@ -93,7 +93,7 @@ func explodePattern(s string) []string {
 	return results
 }
 
-func BuildExports(cfg *Config) ([]*Export, error) {
+func BuildExports(cfg *Config, o chan<- Point) ([]*Export, error) {
 	var exports []*Export
 
 	for name := range cfg.Exports {
@@ -103,9 +103,6 @@ func BuildExports(cfg *Config) ([]*Export, error) {
 		}
 
 		for _, topic := range explodePattern(cfg.Exports[name].Topic) {
-
-			i := make(chan mqtt.Message)
-			o := make(chan Point)
 
 			metric, err := template.New(name + ".metric").Parse(cfg.Exports[name].Metric)
 			if err != nil {
@@ -139,11 +136,8 @@ func BuildExports(cfg *Config) ([]*Export, error) {
 				interval: cfg.Exports[name].Interval,
 				ticker:   nil,
 
-				I: i,
-				O: o,
+				o: o,
 			}
-
-			go e.handle(i, o, parser)
 
 			exports = append(exports, e)
 		}
@@ -166,61 +160,65 @@ func interpolate(t *template.Template, ctx map[string]interface{}) (string, erro
 	return out.String(), nil
 }
 
-func (e *Export) handle(i <-chan mqtt.Message, o chan<- Point, parser func(s string) (interface{}, error)) {
-	for m := range i {
-		now := time.Now()
+func (e *Export) Handle(c mqtt.Client, msg mqtt.Message) {
+	log.Printf("Received message on %s: %s", msg.Topic(), msg.Payload())
 
-		value, err := parser(string(m.Payload()))
+	now := time.Now()
+
+	value, err := e.Parser(string(msg.Payload()))
+	if err != nil {
+		log.Printf("Failed to parse message: %s: %v", msg, err)
+	}
+
+	context := map[string]interface{}{
+		"topic": strings.Split(msg.Topic(), "/"),
+		"value": value,
+	}
+
+	metric, err := interpolate(e.Metric, context)
+	if err != nil {
+		log.Print(err)
+		return
+	}
+
+	tags := make(map[string]string)
+	for k, v := range e.Tags {
+		tags[k], err = interpolate(v, context)
 		if err != nil {
-			log.Printf("Failed to parse message: %s: %v", m, err)
-			continue
+			log.Print(err)
+			return
 		}
+	}
 
-		context := map[string]interface{}{
-			"topic": strings.Split(m.Topic(), "/"),
-			"value": value,
-		}
+	field, err := interpolate(e.Field, context)
+	if err != nil {
+		log.Print(err)
+		return
+	}
 
-		metric, err := interpolate(e.Metric, context)
-		if err != nil {
-			log.Printf("%v", err)
-		}
+	point := Point{
+		Metric: metric,
+		Tags:   tags,
+		Field:  field,
+		Value:  value,
+		Time:   now,
+	}
 
-		tags := make(map[string]string)
-		for k, v := range e.Tags {
-			tags[k], err = interpolate(v, context)
-			if err != nil {
-				log.Printf("%v", err)
+	e.LastPoint = point
+	e.ReceivedTime = &now
+
+	e.o <- point
+
+	if e.ticker != nil {
+		e.ticker.Stop()
+	}
+	if e.interval != 0 {
+		e.ticker = time.NewTicker(e.interval)
+		go func() {
+			for range e.ticker.C {
+				point.Time = time.Now()
+				e.o <- point
 			}
-		}
-
-		field, err := interpolate(e.Field, context)
-		if err != nil {
-			log.Printf("%v", err)
-		}
-
-		point := Point{
-			Metric: metric,
-			Tags:   tags,
-			Field:  field,
-			Value:  value,
-		}
-
-		e.LastPoint = point
-		e.ReceivedTime = &now
-
-		o <- point
-
-		if e.ticker != nil {
-			e.ticker.Stop()
-		}
-		if e.interval != 0 {
-			e.ticker = time.NewTicker(e.interval)
-			go func() {
-				for range e.ticker.C {
-					o <- point
-				}
-			}()
-		}
+		}()
 	}
 }

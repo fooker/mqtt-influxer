@@ -16,3 +16,17 @@ exports:
     metric: "{{index .topic 5}}"
     tags:
       id: "{{index .topic 3}}"
+
+  temperatur:
+    topic: "maglab/space/esper/+/sensor/temperature"
+    parser: float
+    metric: "temperature"
+    tags:
+      id: "{{index .topic 3}}"
+
+  humidity:
+    topic: "maglab/space/esper/+/sensor/humidity"
+    parser: float
+    metric: "humidity"
+    tags:
+      id: "{{index .topic 3}}"

@@ -5,7 +5,6 @@ import (
 	"log"
 	"github.com/eclipse/paho.mqtt.golang"
 	influxdb "github.com/influxdata/influxdb/client/v2"
-	"time"
 	"flag"
 )
 
@@ -46,52 +45,48 @@ func main() {
 
 	defer influxdbClient.Close()
 
+	o := make(chan Point, 10)
+	go func() {
+		for point := range o {
+			log.Printf("Storing point: %v", point)
+
+			points, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+				Database:  config.InfluxDB.Database,
+				Precision: "us",
+			})
+
+			point, err := influxdb.NewPoint(
+				point.Metric,
+				point.Tags,
+				map[string]interface{}{point.Field: point.Value},
+				point.Time,
+			)
+			if err != nil {
+				log.Printf("Invalid data point: %v", err)
+			}
+
+			points.AddPoint(point)
+
+			err = influxdbClient.Write(points)
+			if err != nil {
+				log.Printf("Failed to insert data point: %v", err)
+			}
+		}
+	}()
+
 	// Create exports
-	exports, err := BuildExports(config)
+	exports, err := BuildExports(config, o)
 	if err != nil {
 		log.Fatalf("Failed to build exports: %v", err)
 	}
 
+	// Subscribe to exports
 	for _, export := range exports {
-		if t := mqttClient.Subscribe(export.Topic, 0, func(client mqtt.Client, message mqtt.Message) {
-			log.Printf("Received message on %s: %s", message.Topic(), message.Payload())
-
-			export.I <- message
-
-		}); t.Wait() && t.Error() != nil {
+		if t := mqttClient.Subscribe(export.Topic, 0, export.Handle); t.Wait() && t.Error() != nil {
 			log.Fatalf("Failed to subscribe %s: %v", export.Topic, t.Error())
 		} else {
 			log.Printf("Subscribed to %s", export.Topic)
 		}
-
-		go func() {
-			for point := range export.O {
-				log.Printf("Storing point: %v", point)
-
-				points, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-					Database:  config.InfluxDB.Database,
-					Precision: "us",
-				})
-
-				point, err := influxdb.NewPoint(
-					point.Metric,
-					point.Tags,
-					map[string]interface{}{point.Field: point.Value},
-					time.Now())
-				if err != nil {
-					log.Printf("Invalid data point: %v", err)
-				}
-
-				points.AddPoint(point)
-
-				err = influxdbClient.Write(points)
-				if err != nil {
-					log.Printf("Failed to insert data point: %v", err)
-				}
-			}
-		}()
-
-		exports = append(exports, export)
 	}
 
 	if *http_flag != "" {
