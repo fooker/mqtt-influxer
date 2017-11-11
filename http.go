@@ -11,14 +11,23 @@ func Publish(addr string, exports []*Export) error {
 
 		data := make(map[string]map[string]interface{}, len(exports))
 		for _, export := range exports {
+			//tags := make(map[string]string)
+			//for k, v := range export.Tags {
+			//	tags[k] = v.DefinedTemplates()
+			//}
+
 			data[export.Name] = map[string]interface{}{
-				"topic":          export.Topic,
-				"type":           export.Type,
-				"database":       export.Database,
-				"metric":         export.Metric,
-				"tags":           export.Tags,
-				"field":          export.Field,
-				"last_value":     export.LastValue,
+				"topic":  export.Topic,
+				//"parser": export.Parser,
+				//"metric": export.Metric.Name(),
+				//"tags":   tags,
+				//"field":  export.Field.DefinedTemplates(),
+				"last_point": map[string]interface{}{
+					"metric": export.LastPoint.Metric,
+					"tags":   export.LastPoint.Tags,
+					"field":  export.LastPoint.Field,
+					"value":  export.LastPoint.Value,
+				},
 				"received_time":  export.ReceivedTime,
 				"published_time": export.PublishedTime,
 			}

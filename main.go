@@ -47,37 +47,36 @@ func main() {
 	defer influxdbClient.Close()
 
 	// Create exports
-	exports := make([]*Export, 0)
-	for name, config := range config.Exports {
-		export, err := NewExport(name, config)
-		if err != nil {
-			log.Fatalf("Failed to create export: %v", err)
-		}
+	exports, err := BuildExports(config)
+	if err != nil {
+		log.Fatalf("Failed to build exports: %v", err)
+	}
 
-		defer export.Stop()
-
-		if t := mqttClient.Subscribe(config.Topic, 0, func(client mqtt.Client, message mqtt.Message) {
+	for _, export := range exports {
+		if t := mqttClient.Subscribe(export.Topic, 0, func(client mqtt.Client, message mqtt.Message) {
 			log.Printf("Received message on %s: %s", message.Topic(), message.Payload())
 
-			export.I <- string(message.Payload())
+			export.I <- message
 
 		}); t.Wait() && t.Error() != nil {
-			log.Fatalf("Failed to subscribe %s: %v", config.Topic, t.Error())
+			log.Fatalf("Failed to subscribe %s: %v", export.Topic, t.Error())
 		} else {
-			log.Printf("Subscribed to %s", config.Topic)
+			log.Printf("Subscribed to %s", export.Topic)
 		}
 
 		go func() {
-			for value := range export.O {
+			for point := range export.O {
+				log.Printf("Storing point: %v", point)
+
 				points, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-					Database:  export.Database,
+					Database:  config.InfluxDB.Database,
 					Precision: "us",
 				})
 
 				point, err := influxdb.NewPoint(
-					export.Metric,
-					export.Tags,
-					map[string]interface{}{export.Field: value},
+					point.Metric,
+					point.Tags,
+					map[string]interface{}{point.Field: point.Value},
 					time.Now())
 				if err != nil {
 					log.Printf("Invalid data point: %v", err)
@@ -97,8 +96,12 @@ func main() {
 
 	if *http_flag != "" {
 		Publish(*http_flag, exports)
-		
+
 	} else {
 		select {}
+	}
+
+	for _, export := range exports {
+		export.Stop()
 	}
 }

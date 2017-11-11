@@ -1,7 +1,6 @@
 mqtt:
   address: localhost:1883
   client_id: maglab/space/influxer
-  realm: maglab/space
 
 influxdb:
   address: 127.0.0.1:8086
@@ -10,33 +9,10 @@ influxdb:
   password: a44JLX5E2c2ly6J48jB0i9ic7GDgERCq
 
 exports:
-  gas.gauge:
-    topic: esper/67890/counter/gauge
+  heater:
+    topic: "maglab/space/esper/+/controller/{input,output,pterm,iterm,dterm}"
+    parser: float
 
-  gas.count:
-    topic: esper/67890/counter/count
-    type: int
-
-  electricity.gauge:
-    topic: esper/12345/counter/gauge
-
-    metric: power
-    field: gauge
-
-  electricity.count:
-    topic: esper/12345/counter/count
-
-    metric: power
-    field: count
-
-
-  room.open:
-    topic: janitor/room/open
-    type: bool
-
-    database: stats
-    metric: open
+    metric: "{{index .topic 5}}"
     tags:
-      door: left
-
-    interval: 5s
+      id: "{{index .topic 3}}"
