@@ -6,15 +6,17 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 	influxdb "github.com/influxdata/influxdb/client/v2"
 	"flag"
+	"os"
+	"os/signal"
 )
 
-var config_flag = flag.String("config", "config.yaml", "Path to the config file")
-var http_flag = flag.String("http", "", "Listening address for http status export (leave empty to disable)")
+var configFlag = flag.String("config", "config.yaml", "Path to the config file")
 
 func main() {
 	flag.Parse()
 
-	config, err := LoadConfig(*config_flag)
+	// Load config
+	config, err := LoadConfig(*configFlag)
 	if err != nil {
 		log.Fatalf("Failed to parse config file: %v", err)
 	}
@@ -45,6 +47,7 @@ func main() {
 
 	defer influxdbClient.Close()
 
+	// Spawn export handlers
 	o := make(chan Point, 10)
 	go func() {
 		for point := range o {
@@ -89,12 +92,10 @@ func main() {
 		}
 	}
 
-	// Run HTTP server or wait forever
-	if *http_flag != "" {
-		Publish(*http_flag, exports)
-	} else {
-		select {}
-	}
+	// Wait for termination
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+	<-signalChan
 
 	// Stop all exporters
 	for _, export := range exports {
