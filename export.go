@@ -2,7 +2,6 @@ package main
 
 import (
 	"time"
-	"strconv"
 	"log"
 	"fmt"
 	"strings"
@@ -11,13 +10,10 @@ import (
 	"github.com/eclipse/paho.mqtt.golang"
 )
 
-type Parser func(s string) (interface{}, error)
-
 type Point struct {
 	Metric string
 	Tags   map[string]string
-	Field  string
-	Value  interface{}
+	Values map[string]interface{}
 	Time   time.Time
 }
 
@@ -30,7 +26,6 @@ type Export struct {
 
 	Metric *template.Template
 	Tags   map[string]*template.Template
-	Field  *template.Template
 
 	LastPoint Point
 
@@ -41,34 +36,6 @@ type Export struct {
 	ticker   *time.Ticker
 
 	o chan<- Point
-}
-
-func findParser(p string) (Parser, error) {
-	switch p {
-	case "string":
-		return func(s string) (interface{}, error) {
-			return s, nil
-		}, nil
-
-	case "bool":
-		return func(s string) (interface{}, error) {
-			// TODO: Specify values in config
-			return strconv.ParseBool(s)
-		}, nil
-
-	case "int":
-		return func(s string) (interface{}, error) {
-			return strconv.ParseInt(s, 0, 64)
-		}, nil
-
-	case "float":
-		return func(s string) (interface{}, error) {
-			return strconv.ParseFloat(s, 64)
-		}, nil
-
-	default:
-		return nil, fmt.Errorf("parser not supported: %s", p)
-	}
 }
 
 func explodePattern(s string) []string {
@@ -97,7 +64,7 @@ func BuildExports(cfg *Config, o chan<- Point) ([]*Export, error) {
 	var exports []*Export
 
 	for name := range cfg.Exports {
-		parser, err := findParser(cfg.Exports[name].Parser)
+		parser, err := MakeParser(cfg.Exports[name].Parser)
 		if err != nil {
 			return nil, err
 		}
@@ -117,11 +84,6 @@ func BuildExports(cfg *Config, o chan<- Point) ([]*Export, error) {
 				}
 			}
 
-			field, err := template.New(name + ".field").Parse(cfg.Exports[name].Field)
-			if err != nil {
-				return nil, fmt.Errorf("invalid template: %v", err)
-			}
-
 			e := &Export{
 				Name: name,
 
@@ -131,7 +93,6 @@ func BuildExports(cfg *Config, o chan<- Point) ([]*Export, error) {
 
 				Metric: metric,
 				Tags:   tags,
-				Field:  field,
 
 				interval: cfg.Exports[name].Interval,
 				ticker:   nil,
@@ -165,14 +126,13 @@ func (e *Export) Handle(c mqtt.Client, msg mqtt.Message) {
 
 	now := time.Now()
 
-	value, err := e.Parser(string(msg.Payload()))
+	values, err := e.Parser(string(msg.Payload()))
 	if err != nil {
 		log.Printf("Failed to parse message: %s: %v", msg, err)
 	}
 
 	context := map[string]interface{}{
 		"topic": strings.Split(msg.Topic(), "/"),
-		"value": value,
 	}
 
 	metric, err := interpolate(e.Metric, context)
@@ -190,17 +150,10 @@ func (e *Export) Handle(c mqtt.Client, msg mqtt.Message) {
 		}
 	}
 
-	field, err := interpolate(e.Field, context)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-
 	point := Point{
 		Metric: metric,
 		Tags:   tags,
-		Field:  field,
-		Value:  value,
+		Values: values,
 		Time:   now,
 	}
 

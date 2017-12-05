@@ -27,11 +27,8 @@ type ExportConfig struct {
 
 	Metric string            `yaml:"metric"`
 	Tags   map[string]string `yaml:"tags"`
-	Field  string            `yaml:"field"`
 
 	Interval time.Duration `yaml:"interval"`
-
-	//Options map[string]interface{} `yaml:",inline"`
 }
 
 type Config struct {
@@ -63,10 +60,6 @@ func LoadConfig(filename string) (*Config, error) {
 
 			if config.Exports[name].Tags == nil {
 				config.Exports[name].Tags = make(map[string]string)
-			}
-
-			if config.Exports[name].Field == "" {
-				config.Exports[name].Field = "value"
 			}
 	}
 

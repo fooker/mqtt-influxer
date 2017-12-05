@@ -17,7 +17,7 @@ func Publish(addr string, exports []*Export) error {
 			//}
 
 			data[export.Name] = map[string]interface{}{
-				"topic":  export.Topic,
+				"topic": export.Topic,
 				//"parser": export.Parser,
 				//"metric": export.Metric.Name(),
 				//"tags":   tags,
@@ -25,8 +25,7 @@ func Publish(addr string, exports []*Export) error {
 				"last_point": map[string]interface{}{
 					"metric": export.LastPoint.Metric,
 					"tags":   export.LastPoint.Tags,
-					"field":  export.LastPoint.Field,
-					"value":  export.LastPoint.Value,
+					"values": export.LastPoint.Values,
 				},
 				"received_time":  export.ReceivedTime,
 				"published_time": export.PublishedTime,

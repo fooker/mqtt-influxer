@@ -58,7 +58,7 @@ func main() {
 			point, err := influxdb.NewPoint(
 				point.Metric,
 				point.Tags,
-				map[string]interface{}{point.Field: point.Value},
+				point.Values,
 				point.Time,
 			)
 			if err != nil {
@@ -89,13 +89,14 @@ func main() {
 		}
 	}
 
+	// Run HTTP server or wait forever
 	if *http_flag != "" {
 		Publish(*http_flag, exports)
-
 	} else {
 		select {}
 	}
 
+	// Stop all exporters
 	for _, export := range exports {
 		export.Stop()
 	}
