@@ -51,7 +51,10 @@ func main() {
 	o := make(chan Point, 10)
 	go func() {
 		for point := range o {
-			log.Printf("Storing point: %v", point)
+			if point.Values == nil || len(point.Values) == 0 {
+				log.Printf("Skipping empty point: %v", point)
+				continue
+			}
 
 			points, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
 				Database:  config.InfluxDB.Database,

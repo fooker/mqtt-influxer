@@ -122,8 +122,6 @@ func interpolate(t *template.Template, ctx map[string]interface{}) (string, erro
 }
 
 func (e *Export) Handle(c mqtt.Client, msg mqtt.Message) {
-	log.Printf("Received message on %s: %s", msg.Topic(), msg.Payload())
-
 	now := time.Now()
 
 	values, err := e.Parser(string(msg.Payload()))

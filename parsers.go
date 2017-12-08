@@ -34,16 +34,22 @@ func MakeStringParser(opts []string) (Parser, error) {
 }
 
 func MakeBoolParser(opts []string) (Parser, error) {
-	if len(opts) != 1 {
-		return nil, fmt.Errorf("expected parser option: field name")
+	switch len(opts) {
+	case 1:
+		field := wrapper(opts[0])
+		return func(s string) (map[string]interface{}, error) {
+			return field(strconv.ParseBool(s))
+		}, nil
+
+	case 2:
+		field := wrapper(opts[0])
+		return func(s string) (map[string]interface{}, error) {
+			return field(s == opts[1], nil)
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("expected parser option: field name, [true value]")
 	}
-
-	field := wrapper(opts[0])
-
-	return func(s string) (map[string]interface{}, error) {
-		// TODO: Specify values in config
-		return field(strconv.ParseBool(s))
-	}, nil
 }
 
 func MakeIntParser(opts []string) (Parser, error) {
