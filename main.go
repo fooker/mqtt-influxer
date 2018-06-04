@@ -12,6 +12,35 @@ import (
 
 var configFlag = flag.String("config", "config.yaml", "Path to the config file")
 
+func logPoint(point *influxdb.Point) {
+	var f bool
+
+	tags := point.Tags()
+	vals, _ := point.Fields()
+
+	tagsStr := ""
+	f = true
+        for k, v := range tags {
+                if !f {
+			tagsStr += " "
+		}
+		tagsStr += fmt.Sprintf("%s=%v", k, v)
+		f = false
+	}
+
+	valsStr := ""
+	f = true
+        for k, v := range vals {
+                if !f {
+			valsStr += " "
+		}
+		valsStr += fmt.Sprintf("%s=%v", k, v)
+		f = false
+	}
+
+        log.Printf("Added data %s[%s]: %s", point.Name(), tagsStr, valsStr)
+}
+
 func main() {
 	flag.Parse()
 
@@ -70,6 +99,8 @@ func main() {
 			if err != nil {
 				log.Printf("Invalid data point: %v", err)
 			}
+
+			logPoint(point)
 
 			points.AddPoint(point)
 
